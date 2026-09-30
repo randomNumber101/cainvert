@@ -89,7 +89,7 @@ def _worker_entrypoint(
     attempts = 0
     t_start = time.time()
     last_report_count = 0
-    report_interval = max(50, samples_per_depth_worker * len(depths) // 200)
+    report_interval = max(2, min(50, flush_interval))
 
     # Periodic chunk flushing buffer
     pending_trees: List[TreeData] = []
