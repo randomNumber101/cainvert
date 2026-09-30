@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cainvert"
+version = "0.1.0"
+description = "Scalable 1D & 2D Cellular Automata Preimage Tree Mining & Benchmark Engine for Recursive Models"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.22.0",
+    "python-sat>=1.9",
+    "pyarrow>=10.0.0",
+    "duckdb>=0.9.0",
+    "tqdm>=4.60.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+torch = [
+    "torch>=1.12.0",
+]
+hub = [
+    "huggingface_hub>=0.20.0",
+]
+all = [
+    "torch>=1.12.0",
+    "huggingface_hub>=0.20.0",
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+cainvert = "cainvert.cli.main:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
