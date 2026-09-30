@@ -116,7 +116,7 @@ def _worker_entrypoint(
         )
 
         if tree is not None:
-            allow_fallback = (attempts > (len(depths) * samples_per_depth_worker * 2))
+            allow_fallback = (attempts > (len(depths) * samples_per_depth_worker * 2)) or (dimension == "2d")
             accepted = bucket_mgr.add_tree(tree, allow_fallback=allow_fallback)
             collected = bucket_mgr.total_collected()
 

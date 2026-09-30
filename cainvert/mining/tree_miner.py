@@ -21,6 +21,7 @@ class TreeMiner:
         min_density: float = 0.25,
         max_density: float = 0.75,
         min_step_activity: float = 0.05,
+        dynamic_level_capacity: bool = True,
     ):
         self.engine = engine
         self.leaf_cap = leaf_cap
@@ -29,6 +30,7 @@ class TreeMiner:
         self.min_density = min_density
         self.max_density = max_density
         self.min_step_activity = min_step_activity
+        self.dynamic_level_capacity = dynamic_level_capacity
 
     def mine_single_tree(
         self,
@@ -85,6 +87,12 @@ class TreeMiner:
             gt_ancestor_flat = gt_ancestor.flatten()
             next_nodes: List[np.ndarray] = []
 
+            # Dynamic geometric capacity for level k: ceil(L_max ^ (step / D))
+            if self.dynamic_level_capacity:
+                level_capacity = int(np.ceil(self.leaf_cap ** (step / float(target_depth))))
+            else:
+                level_capacity = self.leaf_cap
+
             prev_gt = trajectory[target_depth - step + 1]
             prev_gt_flat = prev_gt.flatten()
 
@@ -94,25 +102,36 @@ class TreeMiner:
                     gt_node_idx = idx
                     break
 
-            max_expand_nodes = min(len(cur_nodes), self.max_nodes_per_level)
-            if gt_node_idx is not None and len(cur_nodes) > max_expand_nodes:
-                other_indices = [i for i in range(len(cur_nodes)) if i != gt_node_idx]
-                sampled = rng.choice(other_indices, size=max_expand_nodes - 1, replace=False).tolist()
-                nodes_to_expand = [cur_nodes[gt_node_idx]] + [cur_nodes[i] for i in sampled]
+            # Order nodes so ground-truth ancestor is ALWAYS expanded first
+            if gt_node_idx is not None:
+                ordered_nodes = [cur_nodes[gt_node_idx]] + [cur_nodes[i] for i in range(len(cur_nodes)) if i != gt_node_idx]
             else:
-                nodes_to_expand = cur_nodes
+                ordered_nodes = cur_nodes
+
+            max_expand_nodes = min(len(ordered_nodes), self.max_nodes_per_level)
+            if len(ordered_nodes) > max_expand_nodes:
+                other_indices = list(range(1, len(ordered_nodes)))
+                sampled = rng.choice(other_indices, size=max_expand_nodes - 1, replace=False).tolist()
+                nodes_to_expand = [ordered_nodes[0]] + [ordered_nodes[i] for i in sampled]
+            else:
+                nodes_to_expand = ordered_nodes
 
             for node in nodes_to_expand:
+                # Early stop if we have already accumulated enough candidates for this level
+                if len(next_nodes) >= level_capacity:
+                    break
+
                 res = self.engine.get_preimages(
                     node,
                     max_count=self.max_branch_per_node,
                     timeout_seconds=node_timeout_sec,
                 )
                 if res.count == 0 or len(res.preimages) == 0:
+                    # Garden of Eden side-branch: dead-ends naturally, main branch continues
                     continue
                 next_nodes.extend(res.preimages)
 
-            # Guarantee that gt_ancestor is included in next_nodes
+            # Guarantee that gt_ancestor is strictly included in next_nodes
             gt_present = any(np.array_equal(n.flatten(), gt_ancestor_flat) for n in next_nodes)
             if not gt_present:
                 next_nodes.append(gt_ancestor)
@@ -123,15 +142,15 @@ class TreeMiner:
             _, unique_indices = np.unique(nodes_flat, axis=0, return_index=True)
             unique_nodes = [next_nodes[i] for i in unique_indices]
 
-            # If unique_nodes exceeds leaf_cap, subsample while keeping gt_ancestor
-            if len(unique_nodes) > self.leaf_cap:
+            # If unique_nodes exceeds level_capacity, subsample while preserving gt_ancestor
+            if len(unique_nodes) > level_capacity:
                 gt_idx = None
                 for idx, n in enumerate(unique_nodes):
                     if np.array_equal(n.flatten(), gt_ancestor_flat):
                         gt_idx = idx
                         break
                 other_indices = [i for i in range(len(unique_nodes)) if i != gt_idx]
-                sampled_indices = rng.choice(other_indices, size=self.leaf_cap - 1, replace=False).tolist()
+                sampled_indices = rng.choice(other_indices, size=level_capacity - 1, replace=False).tolist()
                 unique_nodes = [unique_nodes[gt_idx]] + [unique_nodes[i] for i in sampled_indices]
 
             tree_levels.append(unique_nodes)
