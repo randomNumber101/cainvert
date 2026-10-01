@@ -13,7 +13,7 @@
 
 Operating on **Wolfram Rule 110** (1D Turing-complete) and **Conway's Game of Life** (2D class 4), CAInvert inverts cellular automata forward dynamics by mining full **preimage branching trees** and synthesizing minimal spatial **disambiguation hint tapes** via hitting-set algorithms.
 
-The complete benchmark portfolio of **504,000+ verified preimage trees** is publicly available on [Hugging Face Datasets](https://huggingface.co/datasets/randomNumber101/cainvert-benchmark).
+The complete benchmark portfolio of **510,000+ verified preimage trees** is publicly available on [Hugging Face Datasets](https://huggingface.co/datasets/randomnumber101/cainvert-benchmark).
 
 ---
 
@@ -88,11 +88,12 @@ The pre-mined benchmark is partitioned across exact scale parities between 1D an
 | **`1d_w81`** | 1D | Rule 110 | $(81,)$ | $N = 81$ | **249,920** | 100 shards (32.5 MB) | $1, 2, 3, 4, 6, 8, 10, 12$ |
 | **`1d_w400`** | 1D | Rule 110 | $(400,)$ | $N = 400$ | **149,920** | 60 shards (54.1 MB) | $1, 2, 3, 4, 6, 8, 10, 12$ |
 | **`1d_w900`** | 1D | Rule 110 | $(900,)$ | $N = 900$ | **100,000** | 40 shards (73.9 MB) | $1, 2, 3, 4, 6, 8, 10, 12$ |
-| **`2d_9x9`** | 2D | Life $B3/S23$ | $(9, 9)$ | $N = 81$ | **4,400** | 176 shards (1.5 MB) | $1, 2, 3, 4, 6, 8, 10, 12$ |
-| **`2d_30x30`** | 2D | Life $B3/S23$ | $(30, 30)$ | $N = 900$ | **150+** | 6 shards (0.2 MB) | $1, 2, 3, 4, 6, 8$ |
-| **Total** | - | - | - | - | **504,390+** | **382 shards (~162 MB)** | - |
+| **`2d_9x9`** | 2D | Life $B3/S23$ | $(9, 9)$ | $N = 81$ | **6,000** | 192 shards (1.8 MB) | $1, 2, 3, 4, 6, 8, 10, 12$ |
+| **`2d_20x20`** | 2D | Life $B3/S23$ | $(20, 20)$ | $N = 400$ | **2,200** | 411 shards (4.4 MB) | $1, 2, 3, 4, 6, 8, 10$ |
+| **`2d_30x30`** | 2D | Life $B3/S23$ | $(30, 30)$ | $N = 900$ | **2,324** | 437 shards (8.0 MB) | $1, 2, 3, 4, 6, 8, 10$ |
+| **Total** | - | - | - | - | **510,364** | **1,240 shards (174.8 MB)** | - |
 
-All splits are hosted on [Hugging Face: randomNumber101/cainvert-benchmark](https://huggingface.co/datasets/randomNumber101/cainvert-benchmark).
+All splits are hosted on [Hugging Face: randomnumber101/cainvert-benchmark](https://huggingface.co/datasets/randomnumber101/cainvert-benchmark).
 
 ---
 
@@ -147,10 +148,10 @@ You can load any partition directly with the Hugging Face `datasets` library:
 from datasets import load_dataset
 
 # Load the 81-token 1D Rule 110 partition (249,920 trees)
-ds_1d = load_dataset("randomNumber101/cainvert-benchmark", "1d_w81", split="train")
+ds_1d = load_dataset("randomnumber101/cainvert-benchmark", "1d_w81", split="train")
 
 # Load the 2D Game of Life 9x9 partition
-ds_2d = load_dataset("randomNumber101/cainvert-benchmark", "2d_9x9", split="train")
+ds_2d = load_dataset("randomnumber101/cainvert-benchmark", "2d_9x9", split="train")
 
 sample = ds_1d[0]
 print(f"Tree ID: {sample['tree_id']}")
@@ -169,7 +170,7 @@ import duckdb
 conn = duckdb.connect()
 
 # Query summary statistics directly from Hugging Face via remote Parquet
-url = "https://huggingface.co/datasets/randomNumber101/cainvert-benchmark/resolve/main/1d_w81/*.parquet"
+url = "https://huggingface.co/datasets/randomnumber101/cainvert-benchmark/resolve/main/data/1d_w81/*.parquet"
 
 summary = conn.execute(f"""
     SELECT 
