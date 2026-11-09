@@ -1,4 +1,11 @@
-"""Command-line interface for the cainvert benchmark engine."""
+"""Command-line interface for the cainvert benchmark engine.
+
+    cainvert mine-exact  --width 48 --depth 3 --quota 3000 --out-dir data/catalogs/catalog_1d_w48_v02_exact
+    cainvert resplit     --in data/catalogs/catalog_1d_w48_v02_exact --out data/catalogs/catalog_1d_w48_v021_exact
+    cainvert verify      --catalog data/catalogs/catalog_1d_w48_v021_exact
+    cainvert inspect     --catalog data/catalogs/catalog_1d_w48_v021_exact
+    cainvert mine ...    (legacy v0.1 sampled miner, 1D and 2D)
+"""
 
 import argparse
 import sys
@@ -8,7 +15,6 @@ import numpy as np
 
 from cainvert.core.filters import is_density_valid
 from cainvert.engines.eca_1d import ECA1DEngine
-from cainvert.engines.sat_2d import SAT2DEngine
 from cainvert.mining.tree_miner import TreeMiner
 from cainvert.mining.bucket_sampler import BucketSpec, StratifiedBucketManager
 from cainvert.storage.parquet_io import export_trees_to_parquet
@@ -16,10 +22,11 @@ from cainvert.storage.catalog import TreeCatalog
 
 
 def cmd_mine(args: argparse.Namespace) -> None:
-    """Execute mining run with Stratified Bucket Sampling."""
+    """Execute the legacy (v0.1) sampled mining run with Stratified Bucket Sampling."""
     dim = args.dimension.lower()
     print(f"\n{'='*70}")
-    print(f" CAINVERT MINING ENGINE (Dimension: {dim.upper()})")
+    print(f" CAINVERT MINING ENGINE (Dimension: {dim.upper()}) -- legacy sampled miner (v0.1)")
+    print(f" For exact, branching-controlled 1D catalogs use: cainvert mine-exact")
     print(f"{'='*70}")
 
     if dim == "1d":
@@ -27,6 +34,7 @@ def cmd_mine(args: argparse.Namespace) -> None:
         engine = ECA1DEngine(rule_number=args.rule)
         print(f"Engine: 1D ECA Rule {args.rule} | Width: {args.width}")
     elif dim == "2d":
+        from cainvert.engines.sat_2d import SAT2DEngine
         grid_shape = (args.height, args.width)
         engine = SAT2DEngine(grid_shape=grid_shape, rule_str=args.rule_str)
         print(f"Engine: 2D Life-like {args.rule_str} | Grid: {args.height}x{args.width}")
@@ -107,7 +115,8 @@ def cmd_mine(args: argparse.Namespace) -> None:
 
 def cmd_inspect(args: argparse.Namespace) -> None:
     """Inspect an existing Parquet tree pool using DuckDB."""
-    catalog = TreeCatalog(args.catalog)
+    catalog = TreeCatalog(args.catalog if "*" in args.catalog or args.catalog.endswith(".parquet")
+                          else args.catalog.rstrip("/\\") + "/**/*.parquet")
     total = catalog.count()
     print(f"\nCatalog: {args.catalog}")
     print(f"Total Trees: {total:,}")
@@ -115,18 +124,65 @@ def cmd_inspect(args: argparse.Namespace) -> None:
     rows = catalog.query(limit=5)
     print("\nSample Trees:")
     for r in rows:
+        extra = ""
+        if "search_work" in r:
+            extra = f", search_work={r['search_work']}, split={r.get('split')}, {r.get('catalog_version')}"
         print(
             f" - {r['tree_id']}: Depth={r['depth']}, Leaves={r['leaf_count']}, "
-            f"b_eff={r['effective_branching']:.2f}, Hints={r['num_hints']} ({r['hint_density']*100:.1f}%)"
+            f"b_eff={r['effective_branching']:.2f}, Hints={r['num_hints']} ({r['hint_density']*100:.1f}%){extra}"
         )
+
+
+def cmd_mine_exact(argv) -> None:
+    """Exact, branching-controlled 1D catalogs (schema v0.2.1); see cainvert.mining.exact_miner."""
+    from cainvert.mining.exact_miner import main as exact_main
+    exact_main(argv)
+
+
+def cmd_resplit(argv) -> None:
+    """Re-key an existing exact catalog to schema v0.2.1 (sd_hash ids, dedup, train/val/test)."""
+    from cainvert.mining.resplit import main as resplit_main
+    resplit_main(argv)
+
+
+def cmd_verify(args: argparse.Namespace) -> None:
+    """Audit an exact catalog: unique ids, no target state in two splits, ground truth passes the
+    verifier, the reference solver recovers exactly the ground truth, search_work matches."""
+    import duckdb
+    from cainvert.eval import check_ground_truth, solve_records
+    from cainvert.storage.exact_catalog import available_splits, catalog_glob, load_records
+
+    g = catalog_glob(args.catalog)
+    con = duckdb.connect()
+    n, n_ids, n_sd = con.execute(
+        f"SELECT count(*), count(DISTINCT tree_id), count(DISTINCT (target_state, depth)) "
+        f"FROM read_parquet('{g}', union_by_name=True)").fetchone()
+    leak = con.execute(
+        f"SELECT count(*) FROM (SELECT target_state, depth FROM read_parquet('{g}', union_by_name=True) "
+        f"GROUP BY target_state, depth HAVING count(DISTINCT split) > 1)").fetchone()[0]
+    print(f"{args.catalog}: {n:,} rows | unique ids {n_ids:,} | unique (target, depth) {n_sd:,} | "
+          f"targets in >1 split: {leak}")
+    ok = (n == n_ids) and (n == n_sd) and (leak == 0)
+    for split in available_splits(args.catalog):
+        recs = load_records(args.catalog, split, per_cell=args.per_cell)
+        gt = check_ground_truth(recs)
+        ref = solve_records(recs, level_cap=args.level_cap)
+        work_ok = ref["search_work"] == ref["catalog_search_work"]
+        print(f"  split {split:5s}: checked {len(recs):5d} | gt passes verifier {gt.mean() * 100:6.2f}% | "
+              f"reference solver unique & == gt {ref['matches_gt'].mean() * 100:6.2f}% | "
+              f"search_work matches {work_ok.mean() * 100:6.2f}%")
+        ok = ok and bool(gt.all()) and bool(ref["matches_gt"].all()) and bool(work_ok.all())
+    print("OK" if ok else "PROBLEMS FOUND")
+    if not ok:
+        sys.exit(1)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="cainvert", description="Cellular Automata Inversion Benchmark Engine")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
-    # Subcommand: mine
-    mine_parser = subparsers.add_parser("mine", help="Mine computation trees with 2D stratified sampling")
+    # Subcommand: mine (legacy v0.1 sampled miner)
+    mine_parser = subparsers.add_parser("mine", help="Legacy v0.1 sampled miner (1D/2D, capped branching)")
     mine_parser.add_argument("--dimension", type=str, default="1d", choices=["1d", "2d"])
     mine_parser.add_argument("--rule", type=int, default=110, help="1D Rule number (e.g. 110, 30)")
     mine_parser.add_argument("--rule-str", type=str, default="B3/S23", help="2D Rule string (e.g. B3/S23)")
@@ -147,13 +203,29 @@ def main() -> None:
 
     # Subcommand: inspect
     inspect_parser = subparsers.add_parser("inspect", help="Inspect an existing tree catalog")
-    inspect_parser.add_argument("--catalog", type=str, required=True, help="Path/glob to Parquet file(s)")
+    inspect_parser.add_argument("--catalog", type=str, required=True, help="Directory, path or glob of Parquet file(s)")
+
+    # Subcommands with their own argument parsers (remaining argv is forwarded)
+    subparsers.add_parser("mine-exact", help="Mine exact, branching-controlled 1D catalogs (schema v0.2.1)", add_help=False)
+    subparsers.add_parser("resplit", help="Re-key an existing exact catalog to schema v0.2.1", add_help=False)
+
+    # Subcommand: verify
+    verify_parser = subparsers.add_parser("verify", help="Audit an exact catalog (ids, splits, verifier, reference solver)")
+    verify_parser.add_argument("--catalog", type=str, required=True, help="Directory of exact_*.parquet files")
+    verify_parser.add_argument("--per-cell", type=int, default=20, help="Rows per (depth, Lambda bin) to solve exactly")
+    verify_parser.add_argument("--level-cap", type=int, default=50000)
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("mine-exact", "resplit"):
+        (cmd_mine_exact if sys.argv[1] == "mine-exact" else cmd_resplit)(sys.argv[2:])
+        return
 
     args = parser.parse_args()
     if args.subcommand == "mine":
         cmd_mine(args)
     elif args.subcommand == "inspect":
         cmd_inspect(args)
+    elif args.subcommand == "verify":
+        cmd_verify(args)
 
 
 if __name__ == "__main__":
