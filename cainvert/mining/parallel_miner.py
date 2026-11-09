@@ -17,7 +17,10 @@ if _cainvert_root not in sys.path:
 
 from cainvert.core.types import TreeData
 from cainvert.engines.eca_1d import ECA1DEngine
-from cainvert.engines.sat_2d import SAT2DEngine
+try:
+    from cainvert.engines.sat_2d import SAT2DEngine
+except ImportError:  # python-sat not installed: 2D mining unavailable
+    SAT2DEngine = None
 from cainvert.mining.tree_miner import TreeMiner
 from cainvert.mining.bucket_sampler import BucketSpec, StratifiedBucketManager
 from cainvert.storage.parquet_io import export_trees_to_parquet

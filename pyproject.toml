@@ -28,12 +28,12 @@ hub = [
     "huggingface_hub>=0.20.0",
 ]
 sat2d = [
-    "python-sat>=1.9",
+    "python-sat",
 ]
 all = [
     "torch>=1.12.0",
     "huggingface_hub>=0.20.0",
-    "python-sat>=1.9",
+    "python-sat",
     "pytest>=7.0.0",
 ]
 

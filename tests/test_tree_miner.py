@@ -6,8 +6,9 @@ import tempfile
 import numpy as np
 import pytest
 
-from cainvert.engines.eca_1d import ECA1DEngine
-from cainvert.engines.sat_2d import SAT2DEngine
+pytest.importorskip("pysat")  # legacy 2D engine needs python-sat
+from cainvert.engines.eca_1d import ECA1DEngine  # noqa: E402
+from cainvert.engines.sat_2d import SAT2DEngine  # noqa: E402
 from cainvert.mining.tree_miner import TreeMiner
 from cainvert.storage.parquet_io import export_trees_to_parquet, read_trees_from_parquet
 from cainvert.storage.catalog import TreeCatalog
