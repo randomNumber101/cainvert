@@ -2,7 +2,9 @@
 
 import numpy as np
 import pytest
-from cainvert.engines.sat_2d import SAT2DEngine, parse_life_rule
+
+pytest.importorskip("pysat")  # legacy 2D engine needs python-sat
+from cainvert.engines.sat_2d import SAT2DEngine, parse_life_rule  # noqa: E402
 
 
 def test_parse_life_rule():

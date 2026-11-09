@@ -2,7 +2,8 @@ import os
 import tempfile
 import numpy as np
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
 
 from cainvert.core.types import TreeData
 from cainvert.storage.parquet_io import export_trees_to_parquet

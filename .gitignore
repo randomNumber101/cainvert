@@ -36,3 +36,6 @@ tmp/
 # Weights & Biases / Logs
 wandb/
 *.log
+
+# generated dataset card (scripts/upload_exact_catalogs.py)
+docs/DATASET_CARD.md

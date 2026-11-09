@@ -1,7 +1,9 @@
 import os
 import shutil
 import pytest
-from cainvert.mining.parallel_miner import run_parallel_mining
+
+pytest.importorskip("pysat")  # legacy parallel miner mines 2D too
+from cainvert.mining.parallel_miner import run_parallel_mining  # noqa: E402
 from cainvert.storage.catalog import TreeCatalog
 
 
